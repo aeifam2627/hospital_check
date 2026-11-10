@@ -11,6 +11,7 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
+    "test:runtime": "node scripts/verify-export-runtime.mjs",
     "test:e2e": "playwright test",
     "discord:setup": "node scripts/discord-setup.mjs",
     "discord:worker": "node --experimental-strip-types scripts/discord-worker.mjs",

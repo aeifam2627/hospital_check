@@ -1,5 +1,5 @@
 import type ExcelJS from 'exceljs'
-import layouts from './templates/inspection-layouts.json'
+import layouts from './templates/inspection-layouts.json' with { type: 'json' }
 import type { ExportRow } from './export-workbook.js'
 
 type Layout = typeof layouts.templates[number]
