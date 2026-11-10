@@ -1,0 +1,24 @@
+import { CalendarRange, Download, FileSpreadsheet, Info } from 'lucide-react'
+import { useState } from 'react'
+import { todayBangkok } from '../lib/dates'
+import '../dashboard-charts.css'
+
+type Period='day'|'month'|'year'|'all';type Format='detail'|'legacy'|'original'
+export function ReportsPage(){
+  const today=todayBangkok();const [period,setPeriod]=useState<Period>('month');const [date,setDate]=useState(today.slice(0,7));const [type,setType]=useState('');const [format,setFormat]=useState<Format>('original');const [downloadState,setDownloadState]=useState<'idle'|'loading'|'success'|'error'>('idle');const [error,setError]=useState('')
+  function changePeriod(next:Period){setPeriod(next);setDate(next==='day'?today:next==='month'?today.slice(0,7):today.slice(0,4))}
+  const href=`/api/export?period=${period}&date=${encodeURIComponent(date)}&type=${encodeURIComponent(type)}&format=${format}`
+  async function download(){setDownloadState('loading');setError('');try{const response=await fetch(href);if(!response.ok){const body=await response.json().catch(()=>null) as {error?:string}|null;throw new Error(body?.error??'สร้างรายงานไม่สำเร็จ')}const blob=await response.blob();const disposition=response.headers.get('content-disposition')??'';const filename=disposition.match(/filename="?([^";]+)"?/)?.[1]??`hospital-inspection-${date}.xlsx`;const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=filename;document.body.appendChild(anchor);anchor.click();anchor.remove();URL.revokeObjectURL(url);setDownloadState('success')}catch(cause){setError(cause instanceof Error?cause.message:'สร้างรายงานไม่สำเร็จ');setDownloadState('error')}}
+  return <div className="page reports-page"><header className="page-header"><div><h1>ส่งออกรายงาน</h1><p>ดาวน์โหลดไฟล์ Excel จากข้อมูลที่บันทึกจริง</p></div></header>
+    <section className="report-form">
+      <div className="report-field"><span>ช่วงรายงาน</span><div className="period-control" role="group" aria-label="ช่วงรายงาน">{([['day','รายวัน'],['month','รายเดือน'],['year','รายปี'],['all','ทั้งหมด']] as const).map(([value,label])=><button type="button" aria-pressed={period===value} className={period===value?'selected':''} onClick={()=>changePeriod(value)} key={value}>{label}</button>)}</div></div>
+      {period!=='all'&&<label className="report-field"><span>วันที่</span><div className="report-input"><CalendarRange size={19}/><input type={period==='day'?'date':period==='month'?'month':'number'} min={period==='year'?'2020':undefined} max={period==='year'?'2100':undefined} value={date} onChange={e=>setDate(e.target.value)}/></div></label>}
+      <label className="report-field"><span>ประเภทการตรวจ</span><select value={type} onChange={e=>setType(e.target.value)}><option value="">ทุกประเภท</option><option value="medication">ยา</option><option value="emergency-cart">รถ Emergency</option><option value="medical-equipment">เครื่องมือแพทย์</option></select></label>
+      <fieldset className="report-field format-options"><legend>รูปแบบไฟล์</legend><label><input type="radio" name="format" checked={format==='original'} onChange={()=>setFormat('original')}/><span><strong>แบบต้นฉบับ · แนะนำ</strong><small>สีตามแถวรายการ ชั้นอุปกรณ์ และช่องวัน/เวรเหมือนไฟล์เดิม แยกชีตตามเดือนและประเภท</small></span></label><label><input type="radio" name="format" checked={format==='detail'} onChange={()=>setFormat('detail')}/><span><strong>รายละเอียดทั้งหมด</strong><small>หนึ่งรายการต่อแถว แยกชนิดและเบอร์ มีชีตรวมและชีตแยกเดือนสำหรับกรองข้อมูล</small></span></label><label><input type="radio" name="format" checked={format==='legacy'} onChange={()=>setFormat('legacy')}/><span><strong>ตารางวันที่แบบย่อ</strong><small>วันที่เป็นคอลัมน์ แยกแต่ละเวรเป็นแถวและแยกเดือนเป็นชีต</small></span></label></fieldset>
+      <div className="export-preview"><FileSpreadsheet size={24}/><div><strong>{format==='original'?'ตารางที่เจ้าหน้าที่คุ้นเคย':'ไฟล์พร้อมใช้งาน'}</strong><span>{format==='original'?'เก็บสีของแต่ละรายการจากต้นฉบับ พร้อมชีตรายละเอียดครบทุกค่า':'มีชีตสรุปและวันที่ที่เรียงลำดับได้ใน Excel'}{period==='all'?' · รวมทุกเดือนที่มีบันทึก':''}</span></div></div>
+      <button className={downloadState==='loading'?'export-button loading':'export-button'} type="button" onClick={()=>void download()} disabled={downloadState==='loading'}><Download size={20}/>{downloadState==='loading'?'กำลังเตรียมไฟล์…':'ดาวน์โหลด .xlsx'}</button>
+      <div className="download-status" role="status" aria-live="polite">{downloadState==='success'&&'ดาวน์โหลดรายงานสำเร็จ'}{downloadState==='error'&&<><span>{error}</span><button type="button" onClick={()=>void download()}>ลองใหม่</button></>}</div>
+    </section>
+    <aside className="report-note"><Info size={19}/><p>เวลาบันทึกแสดงตาม Asia/Bangkok และประเภทตรวจรายวันจะไม่แสดงเวร ระบบสร้างไฟล์บน server โดยไม่ส่งข้อมูลทั้งปีเข้าหน่วยความจำของ browser</p></aside>
+  </div>
+}

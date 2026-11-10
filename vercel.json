@@ -1,0 +1,9 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
+  "headers": [{ "source": "/api/(.*)", "headers": [
+    { "key": "Cache-Control", "value": "no-store" },
+    { "key": "X-Content-Type-Options", "value": "nosniff" }
+  ] }]
+}
