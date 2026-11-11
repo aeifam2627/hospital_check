@@ -15,6 +15,10 @@ export interface InspectionVariant {
   variant_label: string | null
   unit: string
   standard_qty: number
+  input_kind?: 'count' | 'temperature' | 'humidity'
+  comparison_mode?: 'exact' | 'range'
+  standard_min?: number | null
+  standard_max?: number | null
 }
 
 export interface InspectionItem {
@@ -67,6 +71,9 @@ export interface DifferenceItem {
   item: string
   variant: string | null
   standard_qty: number
+  comparison_mode?: 'exact' | 'range'
+  standard_min?: number | null
+  standard_max?: number | null
   actual_qty: number
   unit: string
 }

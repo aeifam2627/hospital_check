@@ -21,7 +21,7 @@ export function DashboardCharts({ types }: { types: DashboardType[] }) {
       <p className="chart-caption">{series.every(t => t.rounds === 0) ? 'ยังไม่มีบันทึกในรอบที่เลือก' : 'นับจากบันทึกจริง ไม่รวมจำนวนครั้งที่แก้ไข'}</p>
     </article>
     <article className="chart-panel">
-      <header><BarChart3 size={20} aria-hidden="true"/><div><h2>ผลการนับที่บันทึก</h2><p>รวมทุกรอบในวันที่เลือก · หน่วยเป็นช่องกรอก</p></div></header>
+      <header><BarChart3 size={20} aria-hidden="true"/><div><h2>ผลการตรวจที่บันทึก</h2><p>รวมทุกรอบในวันที่เลือก · หน่วยเป็นช่องกรอก</p></div></header>
       <div className="chart-legend"><span><i className="chart-match-key"/>ตรงมาตรฐาน</span><span><i className="chart-difference-key"/>ต้องทบทวน</span></div>
       <div className="chart-bars">{series.map(type => {
         const difference = type.difference_count, matching = Math.max(0, type.fields - difference)
@@ -31,7 +31,7 @@ export function DashboardCharts({ types }: { types: DashboardType[] }) {
           <small className="chart-values">{type.fields ? `ตรง ${matching} · ทบทวน ${difference}` : 'ยังไม่มีข้อมูล'}</small>
         </div>
       })}</div>
-      <p className="chart-caption">ต้องทบทวน = จำนวนต่างมาตรฐานหรือช่องที่ยังไม่ได้กรอก</p>
+      <p className="chart-caption">ต้องทบทวน = ค่าต่างมาตรฐาน อยู่นอกเกณฑ์ หรือช่องที่ยังไม่ได้กรอก</p>
     </article>
   </section>
 }

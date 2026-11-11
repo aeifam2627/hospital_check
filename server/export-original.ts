@@ -1,3 +1,4 @@
+import { isEnvironmentInspection, outsideStandard, standardLabel } from '../src/lib/inspection-values.js'
 import type ExcelJS from 'exceljs'
 import layouts from './templates/inspection-layouts.json' with { type: 'json' }
 import type { ExportRow } from './export-workbook.js'
@@ -46,6 +47,7 @@ export function addOriginalSheets(book: ExcelJS.Workbook, rows: ExportRow[]) {
   for (const [key, batch] of [...batches].sort(([a], [b]) => a.localeCompare(b))) {
     const [month, slug, mode] = key.split('|') as [string, string, string]
     const template = layoutFor(slug, month, mode === 'shift')
+    if (!template && isEnvironmentInspection(slug)) { addEnvironmentSheet(book, batch, month); continue }
     if (!template) throw new Error(`No Excel template for ${slug}`)
     const title = ({ medication: 'ยา', 'emergency-cart': 'รถ Emergency', 'medical-equipment': 'เครื่องมือแพทย์' } as Record<string, string>)[slug]!
     const both = [...batches.keys()].filter(k => k.startsWith(`${month}|${slug}|`)).length > 1
@@ -125,4 +127,44 @@ export function addOriginalSheets(book: ExcelJS.Workbook, rows: ExportRow[]) {
     sheet.headerFooter.oddHeader = `&C${title} — ${month} (พ.ศ. ${year! + 543})`
     sheet.headerFooter.oddFooter = '&Lช่องว่าง = ไม่มีข้อมูล · ค่าตัวแดง = ต่างมาตรฐาน · รายละเอียดแยกชนิดอยู่ในชีตรายละเอียดทั้งหมด&R&P / &N'
   }
+}
+
+// New environmental checks have no legacy inventory workbook. Give them a two-round monthly grid.
+function addEnvironmentSheet(book: ExcelJS.Workbook, rows: ExportRow[], month: string) {
+  const first = rows[0]!
+  const sheet = book.addWorksheet(`${month} ${first.category}`.slice(0,31), { views: [{ state: 'frozen', xSplit: 3, ySplit: 2 }] })
+  const [year, m] = month.split('-').map(Number)
+  const days = new Date(Date.UTC(year!, m!, 0)).getUTCDate()
+  sheet.getColumn(1).width = 28; sheet.getColumn(2).width = 22; sheet.getColumn(3).width = 10
+  sheet.getCell('A1').value = first.category; sheet.getCell('B1').value = 'เกณฑ์'; sheet.getCell('C1').value = 'หน่วย'
+  const groups = new Map<string, ExportRow[]>()
+  for (const row of rows) {
+    const key = `${row.item}|${row.variant}|${standardLabel(row)}|${row.unit}`
+    const group = groups.get(key) ?? []; group.push(row); groups.set(key,group)
+  }
+  for (let day=1; day<=days; day++) {
+    const col=4+(day-1)*2
+    sheet.mergeCells(1,col,1,col+1); sheet.getCell(1,col).value=day
+    sheet.getCell(2,col).value='เช้า'; sheet.getCell(2,col+1).value='บ่าย'
+    sheet.getColumn(col).width=12; sheet.getColumn(col+1).width=12
+  }
+  let index=3
+  for (const group of groups.values()) {
+    const rule=group[0]!
+    sheet.getCell(index,1).value=rule.item; sheet.getCell(index,2).value=standardLabel(rule); sheet.getCell(index,3).value=rule.unit
+    for (const row of group) {
+      const col=4+(Number(row.work_date.slice(8))-1)*2+(row.shift_code==='afternoon'?1:0)
+      const cell=sheet.getCell(index,col); cell.value=row.actual_qty; cell.numFmt='0.##'
+      cell.note=`ผู้ตรวจ: ${row.inspector_name}\nเกณฑ์: ${standardLabel(row)} ${row.unit}\nการแก้ไข: ${row.notes??''}`
+      if(row.actual_qty!==null&&outsideStandard(row.actual_qty,row)) cell.font={color:{argb:'FF9C1C27'},bold:true}
+    }
+    index++
+  }
+  sheet.getCell(index,1).value='ผู้ตรวจ'; sheet.getCell(index+1,1).value='การแก้ไข / หมายเหตุ'
+  for (const row of rows) {
+    const col=4+(Number(row.work_date.slice(8))-1)*2+(row.shift_code==='afternoon'?1:0)
+    sheet.getCell(index,col).value=row.inspector_name; sheet.getCell(index+1,col).value=row.notes??''
+  }
+  sheet.eachRow((row,i)=>{row.height=i<=2?26:48;row.alignment={vertical:'middle',wrapText:true};if(i<=2){row.font={bold:true,color:{argb:'FFFFFFFF'}};row.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF193D81'}}}})
+  sheet.pageSetup={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:'1:2'}
 }

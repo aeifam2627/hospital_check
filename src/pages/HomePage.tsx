@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { AlertCircle, ArrowRight, CheckCircle2, ClipboardCheck, PackageCheck, Pill, Settings2, Siren } from 'lucide-react'
+import { AlertCircle, ArrowRight, CheckCircle2, ClipboardCheck, PackageCheck, Pill, Settings2, Siren, Thermometer, ThermometerSnowflake } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { isEnvironmentInspection } from '../lib/inspection-values'
 import { api } from '../lib/api'
 import { thaiDate, todayBangkok } from '../lib/dates'
 
-const icons = { medication: Pill, 'emergency-cart': Siren, 'medical-equipment': PackageCheck }
+const icons = { medication: Pill, 'emergency-cart': Siren, 'medical-equipment': PackageCheck, 'refrigerator-temperature': ThermometerSnowflake, 'room-environment': Thermometer }
 
 export function HomePage() {
   const date = todayBangkok()
@@ -14,7 +15,7 @@ export function HomePage() {
       <div className="home-identity"><div className="brand-mark"><ClipboardCheck size={24} aria-hidden="true" /></div><div><h1>{import.meta.env.VITE_APP_TITLE ?? 'ระบบตรวจประจำวัน'}</h1><p>{thaiDate(date)}</p></div></div>
       <Link className="manage-link" to="/manage/items"><Settings2 size={18}/><span>จัดการรายการ</span></Link>
     </header>
-    <section className="intro-block"><div className="intro-symbol"><ClipboardCheck size={36} aria-hidden="true"/></div><h2>พร้อมสำหรับ<br/>การตรวจวันนี้</h2><p>เลือกงาน ตรวจนับ แล้วบันทึกได้เลย</p><Link to="/history" className="intro-link">ดูผลตรวจที่ผ่านมา <ArrowRight size={17}/></Link></section>
+    <section className="intro-block"><div className="intro-symbol"><ClipboardCheck size={36} aria-hidden="true"/></div><h2>พร้อมสำหรับ<br/>การตรวจวันนี้</h2><p>เลือกงาน ตรวจสอบ แล้วบันทึกได้เลย</p><Link to="/history" className="intro-link">ดูผลตรวจที่ผ่านมา <ArrowRight size={17}/></Link></section>
     {query.isLoading && <div className="type-list" aria-label="กำลังโหลด">{[1, 2, 3].map((v) => <div className="type-card skeleton" key={v} />)}</div>}
     {query.isError && <div className="error-panel" role="alert"><AlertCircle aria-hidden="true" /><div><strong>โหลดรายการไม่สำเร็จ</strong><p>ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง</p></div><button type="button" onClick={() => void query.refetch()}>ลองใหม่</button></div>}
     {query.data && <div className="type-list">{query.data.data.map((type) => {
@@ -24,7 +25,7 @@ export function HomePage() {
       const statusText=complete?'ตรวจครบแล้ว':type.completed_slots?`ตรวจแล้ว ${type.completed_slots} จาก ${type.total_slots} รอบ`:'ยังไม่ได้ตรวจวันนี้'
       return <Link className={`type-card category-${type.slug}`} to={`/inspect/${type.slug}?date=${date}&shift=${formShift}`} key={type.id}>
         <span className="type-icon"><Icon size={24} aria-hidden="true" /></span>
-        <span className="type-copy"><strong>{type.title_th}</strong><small>{type.schedule_mode === 'daily' ? 'ตรวจวันละ 1 ครั้ง' : 'ตรวจ 3 เวร: เช้า · บ่าย · ดึก'}</small></span>
+        <span className="type-copy"><strong>{type.title_th}</strong><small>{type.schedule_mode === 'daily' ? 'ตรวจวันละ 1 ครั้ง' : isEnvironmentInspection(type.slug) ? 'ตรวจ 2 รอบ: เช้า · บ่าย' : 'ตรวจ 3 เวร: เช้า · บ่าย · ดึก'}</small></span>
         <span className={complete ? 'type-status complete' : 'type-status'}>{complete&&<CheckCircle2 size={16} aria-hidden="true"/>}{statusText}</span>
         <span className="type-action">{complete?'ดูหรือแก้ไข':'เปิดแบบฟอร์ม'}<ArrowRight size={18} aria-hidden="true" /></span>
       </Link>

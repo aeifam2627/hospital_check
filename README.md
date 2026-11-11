@@ -4,7 +4,7 @@
 
 ## สิ่งที่ใช้งานได้
 
-- หน้าหลักแสดง 3 ประเภทและสถานะการส่งของวันที่ปัจจุบัน
+- หน้าหลักแสดง 5 ประเภทและสถานะการส่งของวันที่ปัจจุบัน รวมอุณหภูมิตู้เย็นและอุณหภูมิห้อง/ความชื้น
 - ฟอร์ม dynamic จาก Supabase รองรับรายการ กลุ่ม variant จำนวนมาตรฐาน และ effective date
 - มือถือ 320px ขึ้นไป: ช่องกดง่าย, numeric keypad, progress, ค้นหา, กรองช่องว่าง และ sticky save bar
 - `0` เป็นค่าจริง ส่วนช่องว่างบันทึกไม่ได้; variant เช่น `2/1` แยกคนละช่อง
@@ -27,7 +27,7 @@ Legacy Excel Import พร้อม dry-run/commit อยู่ใน Phase C �
 3. รัน `supabase/migrations/202611090002_phase_b_reporting_notifications.sql`
 4. สร้าง Vault secrets ตามหัวไฟล์ `202611090003_discord_cron.sql` แล้วรัน migration นี้เพื่อสร้าง cron ทุก 2 นาที
 5. รัน `supabase/migrations/202611100001_phase_c_import.sql`
-6. รัน `supabase/seed.sql` ใน SQL Editor
+6. รัน `supabase/seed.sql` ใน SQL Editor แล้วรัน `supabase/migrations/202611110001_environment_inspections.sql` เพื่อเพิ่มแบบตรวจอุณหภูมิและความชื้น หากต้องการแจ้งรอบที่ยังไม่ได้ลงข้อมูล ให้ deploy `send-discord` ล่าสุด แล้วรัน `supabase/migrations/202611110002_missing_environment_rounds.sql` ตาม `docs/ENVIRONMENT_INSPECTIONS.md`
 7. เพิ่มรายชื่อผู้ตรวจในตาราง `inspectors` หากต้องการ dropdown suggestion (ผู้ใช้ยังพิมพ์ชื่อเองได้)
 8. รัน `npm install` และ `npm run dev` สำหรับ UI; การทดลอง API เหมือน production ให้ใช้ `vercel dev`
 
@@ -45,6 +45,7 @@ values ('ชื่อเจ้าหน้าที่', 10);
 
 ดูการตั้ง Discord/Edge Functions ที่ `docs/DISCORD_SETUP.md` และรายการ API ที่ `docs/API.md`
 ดู dry-run/commit ของ Excel เดิมที่ `docs/MIGRATION.md` และการสำรองข้อมูลที่ `docs/BACKUP_RESTORE.md`
+ดูเกณฑ์แบบตรวจอุณหภูมิ/ความชื้น การติดตั้ง และการทดสอบที่ `docs/ENVIRONMENT_INSPECTIONS.md`
 
 ห้ามใช้ `VITE_` นำหน้า secret และห้าม commit `.env` หรือไฟล์ Excel ดิบ
 

@@ -4,6 +4,29 @@ import { createInspectionWorkbook, type ExportRow } from '../../server/export-wo
 
 const row: ExportRow={work_date:'2026-10-01',shift_code:'morning',category:'ยา',category_slug:'medication',schedule_mode:'shift',group:'',item:'Morphine (ยาเสพติด)',variant:'',standard_qty:2,actual_qty:0,unit:'Amp',inspector_name:'ผู้ตรวจทดสอบ',submitted_at:'2026-10-01T18:30:00Z',source:'web_form'}
 
+it('exports environmental readings with range criteria, decimal values and corrective notes in every format', async () => {
+  const reading: ExportRow = { ...row, work_date: '2026-11-11', category: 'อุณหภูมิตู้เย็น', category_slug: 'refrigerator-temperature', item: 'อุณหภูมิตู้เย็น', unit: '°C', standard_qty: 8, comparison_mode: 'range', standard_min: 2, standard_max: 8, actual_qty: 5.25, notes: 'ตรวจซ้ำแล้ว' }
+  for (const format of ['original', 'detail', 'legacy'] as const) {
+    const book = await createInspectionWorkbook([reading, { ...reading, shift_code: 'afternoon', actual_qty: -1.5 }], '2026-11', format)
+    const loaded = new ExcelJS.Workbook(); await loaded.xlsx.load(await book.xlsx.writeBuffer())
+    expect(loaded.getWorksheet('สรุป')!.getCell('D5').value).toBe(1)
+    expect(loaded.getWorksheet('สรุป')!.getCell('E5').value).toBe(1)
+    if (format === 'original') {
+      const sheet = loaded.getWorksheet('2026-11 อุณหภูมิตู้เย็น')!
+      expect(sheet.getCell('B3').value).toBe('2–8')
+      expect(sheet.getCell(3,24).value).toBe(5.25)
+      expect(sheet.getCell(3,25).value).toBe(-1.5)
+      expect(sheet.getCell(5,24).value).toBe('ตรวจซ้ำแล้ว')
+    }
+    {
+      const detail = loaded.getWorksheet('รายละเอียดทั้งหมด')!
+      expect(detail.getCell('G2').value).toBe('2–8')
+      expect(detail.getCell('H2').value).toBe(5.25)
+      expect(detail.getCell('M2').value).toBe('ตรวจซ้ำแล้ว')
+    }
+  }
+})
+
 describe('Excel export',()=>{
   it('creates a real xlsx workbook with summary and typed date cells',async()=>{
     const workbook=await createInspectionWorkbook([{

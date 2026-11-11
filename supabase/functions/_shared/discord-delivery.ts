@@ -15,6 +15,17 @@ export async function deliverOutbox(db: NotificationDatabase, token: string, bas
         if(deferred.error)throw deferred.error
         results.push({id:item.id,status:'deferred'});continue
       }
+      if(item.payload.kind==='missing_round'){
+        const missing=await db.rpc('is_inspection_round_missing',{p_type_slug:item.payload.type_slug,p_work_date:item.payload.work_date,p_shift_code:item.payload.shift_code})
+        if(missing.error)throw missing.error
+        if(missing.data!==true){
+          const cancelled=await db.from('notification_outbox').update({status:'cancelled',updated_at:new Date().toISOString()}).eq('id',item.id)
+          if(cancelled.error)throw cancelled.error
+          const logged=await db.from('notification_logs').insert({outbox_id:item.id,result:'cancelled_already_submitted'})
+          if(logged.error)throw logged.error
+          results.push({id:item.id,status:'cancelled'});continue
+        }
+      }
       const response=await fetch(`https://discord.com/api/v10/channels/${item.target_channel_id}/messages`,{method:'POST',signal:AbortSignal.timeout(15000),headers:{authorization:`Bot ${token}`,'content-type':'application/json','user-agent':`DiscordBot (${baseUrl||'http://localhost:3000'}, 0.1.0)`},body:JSON.stringify(discordBody(item.payload,baseUrl,item.dedupe_key))})
       const body=await response.json().catch(()=>({}))
       if(response.headers?.get('x-ratelimit-remaining')==='0'){

@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, ArrowLeft, Check, CloudOff, RotateCcw, Save, Search, X } from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../lib/api'
+import { MeasurementField } from '../components/MeasurementField'
+import { isEnvironmentInspection, parseInspectionValue } from '../lib/inspection-values'
 import { clearDraft, readDraft, writeDraft } from '../lib/draft'
 import { thaiDate, todayBangkok } from '../lib/dates'
 import type { ShiftCode, SubmissionPayload } from '../types/inspection'
@@ -11,11 +13,7 @@ const shifts: Array<{ code: ShiftCode; label: string }> = [
   { code: 'morning', label: 'เช้า' }, { code: 'afternoon', label: 'บ่าย' }, { code: 'night', label: 'ดึก' },
 ]
 
-export function parseCount(value: string): number | null {
-  if (!/^\d+$/.test(value)) return null
-  const count = Number(value)
-  return Number.isSafeInteger(count) ? count : null
-}
+export const parseCount = (value: string) => parseInspectionValue(value)
 
 export function InspectionPage() {
   const { slug = '' } = useParams()
@@ -37,9 +35,10 @@ export function InspectionPage() {
   const formQuery = useQuery({ queryKey: ['form', slug, date, shift], queryFn: () => api.getForm(slug, date, shift), enabled: Boolean(slug) })
   const inspectorsQuery = useQuery({ queryKey: ['inspectors'], queryFn: api.getInspectors })
   const form = formQuery.data?.data
+  const environment = isEnvironmentInspection(slug)
   const variants = useMemo(() => form?.groups.flatMap((g) => g.items.flatMap((i) => i.variants)) ?? [], [form])
-  const completed = variants.filter((v) => parseCount(values[v.id] ?? '') !== null).length
-  const invalid = new Set(attempted ? variants.filter((v) => parseCount(values[v.id] ?? '') === null).map((v) => v.id) : [])
+  const completed = variants.filter((v) => parseInspectionValue(values[v.id] ?? '', v.input_kind) !== null).length
+  const invalid = new Set(attempted ? variants.filter((v) => parseInspectionValue(values[v.id] ?? '', v.input_kind) === null).map((v) => v.id) : [])
 
   useEffect(() => {
     if (!form) return
@@ -81,14 +80,14 @@ export function InspectionPage() {
     mutation.mutate({
       type_slug: slug, work_date: date, shift_code: form.type.schedule_mode === 'daily' ? 'daily' : shift,
       inspector_name: inspector.trim(), notes: notes.trim(), revision_expected: form.existing_submission?.revision_number ?? 0,
-      idempotency_key: crypto.randomUUID(), results: variants.map((v) => ({ variant_id: v.id, actual_qty: parseCount(values[v.id]!)! })),
+      idempotency_key: crypto.randomUUID(), results: variants.map((v) => ({ variant_id: v.id, actual_qty: parseInspectionValue(values[v.id]!, v.input_kind)! })),
     })
   }
 
   function focusCount(input:HTMLInputElement){input.select();input.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'})}
   function focusVariant(id:string|undefined){if(!id)return;window.setTimeout(()=>document.querySelector<HTMLInputElement>(`input[data-count-id="${id}"]`)?.focus(),40)}
-  function focusFirstIncomplete(){focusVariant(variants.find(variant=>parseCount(values[variant.id]??'')===null)?.id)}
-  function focusNextIncomplete(currentId:string){const index=variants.findIndex(variant=>variant.id===currentId);const ordered=[...variants.slice(index+1),...variants.slice(0,index)];focusVariant(ordered.find(variant=>parseCount(values[variant.id]??'')===null)?.id)}
+  function focusFirstIncomplete(){focusVariant(variants.find(variant=>parseInspectionValue(values[variant.id]??'', variant.input_kind)===null)?.id)}
+  function focusNextIncomplete(currentId:string){const index=variants.findIndex(variant=>variant.id===currentId);const ordered=[...variants.slice(index+1),...variants.slice(0,index)];focusVariant(ordered.find(variant=>parseInspectionValue(values[variant.id]??'', variant.input_kind)===null)?.id)}
 
   if (formQuery.isLoading) return <LoadingForm />
   if (formQuery.isError) return <ErrorState error={formQuery.error} retry={() => void formQuery.refetch()} />
@@ -96,7 +95,7 @@ export function InspectionPage() {
 
   const groups = form.groups.map((group) => ({ ...group, items: group.items.filter((item) => {
     const matches = item.name.toLocaleLowerCase('th').includes(search.toLocaleLowerCase('th'))
-    const missing = item.variants.some((v) => parseCount(values[v.id] ?? '') === null)
+    const missing = item.variants.some((v) => parseInspectionValue(values[v.id] ?? '', v.input_kind) === null)
     return matches && (!onlyIncomplete || missing)
   }) })).filter((group) => group.items.length)
 
@@ -104,17 +103,17 @@ export function InspectionPage() {
     <header className="inspection-header"><Link to="/" className="icon-button" aria-label="กลับหน้าหลัก"><ArrowLeft /></Link><div><h1>{form.type.title_th}</h1><p>{form.existing_submission ? `แก้ไขครั้งที่ ${form.existing_submission.revision_number + 1}` : 'บันทึกรอบใหม่'}</p></div></header>
     <section className="context-panel" aria-label="วันและรอบตรวจ">
       <label><span>วันที่ตรวจ</span><input type="date" value={date} onChange={(e) => setContext(e.target.value, shift)} /></label><strong>{thaiDate(date)}</strong>
-      {form.type.schedule_mode === 'shift' && <div className="shift-control" role="group" aria-label="เลือกเวร">{shifts.map(({ code, label }) => <button type="button" key={code} aria-pressed={shift === code} className={shift === code ? 'selected' : ''} onClick={() => setContext(date, code)}>{label}</button>)}</div>}
+      {form.type.schedule_mode === 'shift' && <div className="shift-control" role="group" aria-label="เลือกเวร">{shifts.filter(({code}) => !form.schedules.length || form.schedules.some(schedule => schedule.shift_code === code)).map(({ code, label }) => <button type="button" key={code} aria-pressed={shift === code} className={shift === code ? 'selected' : ''} onClick={() => setContext(date, code)}>{label}</button>)}</div>}
     </section>
     {draftRestored && <div className="draft-banner"><RotateCcw size={18} /><span>กู้คืนข้อมูลที่ยังไม่ได้บันทึกแล้ว</span><button type="button" onClick={() => { clearDraft(slug, date, shift); setDraftRestored(false); hydrated.current = ''; void formQuery.refetch() }}>ทิ้งฉบับร่าง</button></div>}
     <section className="progress-section" aria-live="polite"><div><strong>กรอกแล้ว {completed} / {variants.length} ช่อง</strong>{completed === variants.length ? <span>พร้อมบันทึก</span> : <button type="button" onClick={focusFirstIncomplete}>ไปช่องที่ยังว่าง</button>}</div><div className="progress-track" role="progressbar" aria-label="ความคืบหน้าการกรอก" aria-valuemin={0} aria-valuemax={variants.length} aria-valuenow={completed}><span style={{ width: `${variants.length ? completed / variants.length * 100 : 0}%` }} /></div></section>
-    <div className="filter-row"><label className="search-box"><Search size={19} /><span className="sr-only">ค้นหา</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหารายการ" />{search && <button type="button" aria-label="ล้างคำค้น" onClick={() => setSearch('')}><X size={18} /></button>}</label><button type="button" aria-pressed={onlyIncomplete} className={onlyIncomplete ? 'filter-button active' : 'filter-button'} onClick={() => setOnlyIncomplete((v) => !v)}>ยังไม่กรอก</button></div>
-    <div className="group-list">{groups.map((group) => <section className="inspection-group" key={group.id ?? 'none'}>{group.name && <h2>{group.name}</h2>}<div className="item-list">{group.items.map((item) => <article className="item-card" key={item.id}><h3>{item.name}</h3><div className="variant-list">{item.variants.map((variant) => <label className={invalid.has(variant.id) ? 'count-row invalid' : 'count-row'} key={variant.id} title={`กรอกจำนวนที่พบ จากค่ามาตรฐาน ${variant.standard_qty} ${variant.unit}`}><span className="variant-copy"><strong>{variant.variant_label ?? 'จำนวนที่พบ'}</strong><small>แตะช่องตัวเลขเพื่อกรอก</small></span><span className="count-input-wrap"><input data-count-id={variant.id} aria-invalid={invalid.has(variant.id)} aria-label={`${item.name} ${variant.variant_label ?? ''} จำนวนมาตรฐาน ${variant.standard_qty} ${variant.unit}`} inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={values[variant.id] ?? ''} placeholder="—" onFocus={event=>focusCount(event.currentTarget)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();focusNextIncomplete(variant.id)}}} onChange={(e) => setValues((current) => ({ ...current, [variant.id]: e.target.value.replace(/\D/g, '').slice(0, 5) }))} /><span className="standard-ratio">/ {variant.standard_qty}</span><span className="count-unit">{variant.unit}</span></span></label>)}</div></article>)}</div></section>)}{groups.length === 0 && <div className="empty-state"><Search size={28} /><strong>ไม่พบรายการ</strong><span>ลองเปลี่ยนคำค้นหาหรือตัวกรอง</span></div>}</div>
+    {!environment && <div className="filter-row"><label className="search-box"><Search size={19} /><span className="sr-only">ค้นหา</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหารายการ" />{search && <button type="button" aria-label="ล้างคำค้น" onClick={() => setSearch('')}><X size={18} /></button>}</label><button type="button" aria-pressed={onlyIncomplete} className={onlyIncomplete ? 'filter-button active' : 'filter-button'} onClick={() => setOnlyIncomplete((v) => !v)}>ยังไม่กรอก</button></div>}
+    <div className="group-list">{groups.map((group) => <section className="inspection-group" key={group.id ?? 'none'}>{group.name && <h2>{group.name}</h2>}<div className="item-list">{group.items.map((item) => <article className="item-card" key={item.id}>{!environment && <h3>{item.name}</h3>}<div className="variant-list">{item.variants.map((variant) => variant.input_kind && variant.input_kind !== 'count' ? <MeasurementField key={variant.id} variant={variant} name={item.name} value={values[variant.id] ?? ''} invalid={invalid.has(variant.id)} onChange={value => setValues(current => ({...current, [variant.id]: value}))} /> : <label className={invalid.has(variant.id) ? 'count-row invalid' : 'count-row'} key={variant.id} title={`กรอกจำนวนที่พบ จากค่ามาตรฐาน ${variant.standard_qty} ${variant.unit}`}><span className="variant-copy"><strong>{variant.variant_label ?? 'จำนวนที่พบ'}</strong><small>แตะช่องตัวเลขเพื่อกรอก</small></span><span className="count-input-wrap"><input data-count-id={variant.id} aria-invalid={invalid.has(variant.id)} aria-label={`${item.name} ${variant.variant_label ?? ''} จำนวนมาตรฐาน ${variant.standard_qty} ${variant.unit}`} inputMode="numeric" pattern="[0-9]*" autoComplete="off" value={values[variant.id] ?? ''} placeholder="—" onFocus={event=>focusCount(event.currentTarget)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();focusNextIncomplete(variant.id)}}} onChange={(e) => setValues((current) => ({ ...current, [variant.id]: e.target.value.replace(/\D/g, '').slice(0, 5) }))} /><span className="standard-ratio">/ {variant.standard_qty}</span><span className="count-unit">{variant.unit}</span></span></label>)}</div></article>)}</div></section>)}{groups.length === 0 && <div className="empty-state"><Search size={28} /><strong>ไม่พบรายการ</strong><span>ลองเปลี่ยนคำค้นหาหรือตัวกรอง</span></div>}</div>
     <section className="submission-details">
       <label><span>ชื่อผู้ตรวจ <em>จำเป็น</em></span><input className="inspector-input" list="inspector-options" aria-invalid={attempted && !inspector.trim()} value={inspector} onChange={(e) => setInspector(e.target.value)} placeholder="เลือกหรือพิมพ์ชื่อผู้ตรวจ" maxLength={120} /><datalist id="inspector-options">{inspectorsQuery.data?.data.map((p) => <option value={p.display_name} key={p.id} />)}</datalist></label>
-      <label><span>หมายเหตุ <small>(ไม่บังคับ)</small></span><textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ระบุสิ่งที่ต้องติดตามเพิ่มเติม" maxLength={500} /></label>
+      <label><span>{environment ? 'การแก้ไขกรณีอยู่นอกเกณฑ์' : 'หมายเหตุ'} <small>(ไม่บังคับ)</small></span><textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={environment ? 'ระบุการตรวจสอบซ้ำหรือการแก้ไขที่ดำเนินการ' : 'ระบุสิ่งที่ต้องติดตามเพิ่มเติม'} maxLength={500} /></label>
     </section>
-    {attempted && (completed !== variants.length || !inspector.trim()) && <div className="validation-summary" role="alert"><AlertCircle size={19} /><span>{completed !== variants.length && !inspector.trim() ? 'กรุณากรอกจำนวนให้ครบทุกช่องและระบุชื่อผู้ตรวจ' : completed !== variants.length ? `กรุณากรอกจำนวนที่เหลืออีก ${variants.length - completed} ช่อง` : 'กรุณาระบุชื่อผู้ตรวจ'}</span></div>}
+    {attempted && (completed !== variants.length || !inspector.trim()) && <div className="validation-summary" role="alert"><AlertCircle size={19} /><span>{completed !== variants.length && !inspector.trim() ? 'กรุณากรอกค่าให้ครบและถูกต้อง พร้อมระบุชื่อผู้ตรวจ' : completed !== variants.length ? `กรุณากรอกค่าให้ถูกต้องอีก ${variants.length - completed} ช่อง` : 'กรุณาระบุชื่อผู้ตรวจ'}</span></div>}
     {mutation.isError && <div className="validation-summary" role="alert"><CloudOff size={19} /><span>{mutation.error instanceof ApiError && mutation.error.status === 409 ? 'ข้อมูลถูกแก้ไขจากอุปกรณ์อื่น กรุณาโหลดข้อมูลล่าสุด' : mutation.error.message}</span>{mutation.error instanceof ApiError && mutation.error.status === 409 && <button type="button" onClick={() => void formQuery.refetch()}>โหลดใหม่</button>}</div>}
     <div className="save-spacer" /><footer className="sticky-save"><div><strong>{completed}/{variants.length}</strong><span>{completed === variants.length ? 'ครบแล้ว' : 'กรอกแล้ว'}</span></div><button type="button" onClick={submit} disabled={mutation.isPending || saved}>{saved ? <><Check /> บันทึกแล้ว</> : mutation.isPending ? 'กำลังบันทึก…' : <><Save /> บันทึกผลตรวจ</>}</button><span className="sr-only" role="status" aria-live="polite">{saved ? 'บันทึกข้อมูลสำเร็จ' : mutation.isPending ? 'กำลังบันทึกข้อมูล' : ''}</span></footer>
   </div>

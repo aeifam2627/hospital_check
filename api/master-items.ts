@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { allowRequest, handleError } from '../server/http.js'
 import { enforceRateLimit } from '../server/rate-limit.js'
 import { getSupabaseAdmin } from '../server/supabase.js'
+import { isEnvironmentInspection } from '../src/lib/inspection-values.js'
 import { isoDate } from '../server/validation.js'
 
 const itemSchema=z.object({
@@ -20,6 +21,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
   try{
     if(!await enforceRateLimit(req,res,'master-items',12,300))return
     const input=itemSchema.parse(req.body),db=getSupabaseAdmin()
+    if(isEnvironmentInspection(input.type_slug)) return res.status(400).json({error:'แบบตรวจสิ่งแวดล้อมใช้รายการและเกณฑ์จากฟอร์มต้นฉบับ'})
     const {data:type,error:typeError}=await db.from('inspection_types').select('id').eq('slug',input.type_slug).eq('is_active',true).single()
     if(typeError||!type)throw typeError??new Error('ไม่พบประเภทแบบตรวจ')
     const {data:duplicate,error:duplicateError}=await db.from('inspection_items').select('id').eq('inspection_type_id',type.id).ilike('name',input.name).is('active_to',null).maybeSingle()
