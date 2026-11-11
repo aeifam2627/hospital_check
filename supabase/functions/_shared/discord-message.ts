@@ -3,6 +3,7 @@ const thaiTime=(iso:string)=>new Intl.DateTimeFormat('th-TH',{hour:'2-digit',min
 const shift=(code:string)=>({night:'ดึก',morning:'เช้า',afternoon:'บ่าย'} as Record<string,string>)[code]??code
 const clean=(value:unknown)=>String(value??'').replace(/@/g,'＠').slice(0,1000)
 const standard=(item:Record<string,any>)=>item.comparison_mode!=='range'?String(item.standard):item.standard_min!=null&&item.standard_max!=null?`${item.standard_min}–${item.standard_max}`:item.standard_max!=null?`ไม่เกิน ${item.standard_max}`:`ตั้งแต่ ${item.standard_min}`
+const readingLines=(readings:Array<Record<string,any>>)=>readings.map(item=>`- ${clean(item.item)}${item.variant?` (${clean(item.variant)})`:''}: ${item.actual==null?'ไม่ได้กรอก':`${clean(item.actual)} ${clean(item.unit)}`} · เกณฑ์ ${standard(item)} ${clean(item.unit)} · ${item.actual==null?'ยังไม่มีค่า':item.outside_standard?'นอกเกณฑ์':'อยู่ในเกณฑ์'}`)
 const nonceFor=(value:string)=>{let a=2166136261,b=2246822519;for(let i=0;i<value.length;i++){a=Math.imul(a^value.charCodeAt(i),16777619);b=Math.imul(b^value.charCodeAt(value.length-1-i),3266489917)}return `${a>>>0}${b>>>0}`}
 
 export function discordBody(payload:Record<string,any>,baseUrl:string,dedupeKey:string){
@@ -14,7 +15,8 @@ export function discordBody(payload:Record<string,any>,baseUrl:string,dedupeKey:
     const lines=[`[ตรวจสอบ${clean(payload.title_th)}] ${payload.revision_number>0?`แก้ไขบันทึก ครั้งที่ ${payload.revision_number}`:'บันทึกผลเรียบร้อย'}`,`วันที่ตรวจ: ${thaiDate(payload.work_date)}`,`เวลาบันทึก: ${thaiTime(payload.submitted_at)} น. (เวลาไทย)`,`ผู้บันทึก: ${clean(payload.inspector_name)}`]
     if(payload.schedule_mode==='shift') lines.push(`เวร: ${shift(payload.shift_code)}`)
     lines.push(`ตรวจครบ: ${payload.completed_count} ช่อง`,`จำนวนต่างมาตรฐาน: ${payload.difference_count} ช่อง`)
-    for(const item of (payload.differences??[]).slice(0,8)) lines.push(`- ${clean(item.item)}${item.variant?` (${clean(item.variant)})`:''}: มาตรฐาน ${standard(item)} / พบ ${item.actual} ${clean(item.unit)}`)
+    if(payload.readings?.length)lines.push('ผลตรวจที่บันทึก:',...readingLines(payload.readings))
+    else for(const item of (payload.differences??[]).slice(0,8)) lines.push(`- ${clean(item.item)}${item.variant?` (${clean(item.variant)})`:''}: มาตรฐาน ${standard(item)} / พบ ${item.actual} ${clean(item.unit)}`)
     if(payload.notes) lines.push(`การแก้ไข / หมายเหตุ: ${clean(payload.notes)}`)
     if((payload.differences??[]).length>8) lines.push(`และอีก ${(payload.differences??[]).length-8} ช่อง`)
     lines.push(`ดูรายละเอียด: ${baseUrl}${payload.detail_path}`)
@@ -23,7 +25,7 @@ export function discordBody(payload:Record<string,any>,baseUrl:string,dedupeKey:
   const submission=payload.submission as Record<string,any>|null
   const lines=[`[สรุป${clean(payload.title_th)}] ${thaiDate(payload.work_date)}`]
   if(payload.shift_code) lines.push(`เวร: ${shift(payload.shift_code)}`)
-  if(submission){lines.push(`ส่งแล้วโดย: ${clean(submission.inspector_name)}`,`เวลาบันทึก: ${thaiTime(submission.submitted_at)} น.`,`ตรวจครบ: ${submission.completed_count} ช่อง`,`จำนวนต่างมาตรฐาน: ${submission.difference_count} ช่อง`);if(submission.notes)lines.push(`หมายเหตุ: ${clean(submission.notes)}`)}else lines.push('ยังไม่พบการบันทึกในรอบนี้')
+  if(submission){lines.push(`ส่งแล้วโดย: ${clean(submission.inspector_name)}`,`เวลาบันทึก: ${thaiTime(submission.submitted_at)} น.`,`ตรวจครบ: ${submission.completed_count} ช่อง`,`จำนวนต่างมาตรฐาน: ${submission.difference_count} ช่อง`);if(submission.readings?.length)lines.push('ผลตรวจที่บันทึก:',...readingLines(submission.readings));if(submission.notes)lines.push(`หมายเหตุ: ${clean(submission.notes)}`)}else lines.push('ยังไม่พบการบันทึกในรอบนี้')
   return {content:lines.join('\n').slice(0,2000),allowed_mentions:{parse:[]},nonce:nonceFor(dedupeKey),enforce_nonce:true}
 }
 

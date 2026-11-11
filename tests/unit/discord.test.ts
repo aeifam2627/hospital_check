@@ -4,6 +4,37 @@ import { deliverOutbox } from '../../supabase/functions/_shared/discord-delivery
 
 afterEach(()=>vi.unstubAllGlobals())
 describe('Discord notifications',()=>{
+  const roomReadings=[
+    {item:'อุณหภูมิห้อง',actual:23.5,unit:'°C',comparison_mode:'range',standard_max:24,outside_standard:false},
+    {item:'ความชื้นห้อง',actual:55.5,unit:'%',comparison_mode:'range',standard_max:60,outside_standard:false},
+  ]
+  const environmentPayload={kind:'submission',type_slug:'room-environment',title_th:'อุณหภูมิห้องและความชื้น',work_date:'2026-11-11',submitted_at:'2026-11-11T01:30:00Z',inspector_name:'ผู้ตรวจทดสอบ',schedule_mode:'shift',shift_code:'morning',revision_number:0,completed_count:2,difference_count:0,differences:[],readings:roomReadings,detail_path:'/history'}
+  it('shows normal refrigerator readings, units and range in the refrigerator message',()=>{
+    const body=discordBody({...environmentPayload,type_slug:'refrigerator-temperature',title_th:'อุณหภูมิตู้เย็น',completed_count:1,readings:[{item:'อุณหภูมิตู้เย็น',actual:5.25,unit:'°C',comparison_mode:'range',standard_min:2,standard_max:8,outside_standard:false}]},'','fridge:1')
+    expect(body.content).toContain('อุณหภูมิตู้เย็น: 5.25 °C · เกณฑ์ 2–8 °C · อยู่ในเกณฑ์')
+    expect(body.content).not.toContain('ความชื้นห้อง')
+  })
+  it('lists both normal room temperature and humidity on separate lines in the same message',()=>{
+    const body=discordBody(environmentPayload,'','room:1')
+    expect(body.content).toContain('- อุณหภูมิห้อง: 23.5 °C · เกณฑ์ ไม่เกิน 24 °C · อยู่ในเกณฑ์\n- ความชื้นห้อง: 55.5 % · เกณฑ์ ไม่เกิน 60 % · อยู่ในเกณฑ์')
+    expect(body.content).toContain('จำนวนต่างมาตรฐาน: 0 ช่อง')
+  })
+  it('marks an abnormal reading once and preserves zero, missing values and corrective notes',()=>{
+    const reading={...roomReadings[0],actual:25,outside_standard:true}
+    const body=discordBody({...environmentPayload,readings:[reading,{...roomReadings[1],actual:0}],difference_count:1,differences:[reading],notes:'ตรวจซ้ำแล้ว @everyone'},'','room:2')
+    expect(body.content).toContain('อุณหภูมิห้อง: 25 °C · เกณฑ์ ไม่เกิน 24 °C · นอกเกณฑ์')
+    expect(body.content).toContain('ความชื้นห้อง: 0 %')
+    expect(body.content.match(/- อุณหภูมิห้อง:/g)).toHaveLength(1)
+    expect(body.content).toContain('ตรวจซ้ำแล้ว ＠everyone')
+    const missing=discordBody({...environmentPayload,readings:[{...roomReadings[0],actual:null}]},'','room:missing')
+    expect(missing.content).toContain('อุณหภูมิห้อง: ไม่ได้กรอก')
+    expect(missing.content).not.toContain('อุณหภูมิห้อง: 0')
+  })
+  it('includes both environmental values in a scheduled summary as well',()=>{
+    const body=discordBody({kind:'summary',title_th:'อุณหภูมิห้องและความชื้น',work_date:'2026-11-11',shift_code:'morning',submission:{inspector_name:'ผู้ตรวจทดสอบ',submitted_at:'2026-11-11T01:30:00Z',completed_count:2,difference_count:0,readings:roomReadings}},'','summary:1')
+    expect(body.content).toContain('อุณหภูมิห้อง: 23.5 °C')
+    expect(body.content).toContain('ความชื้นห้อง: 55.5 %')
+  })
   it('labels a missing afternoon round with its original work date and midnight deadline',()=>{
     const body=discordBody({kind:'missing_round',title_th:'อุณหภูมิตู้เย็น',work_date:'2026-11-11',shift_code:'afternoon',window_start:'17:00',window_end:'24:00',detail_path:'/inspect/refrigerator-temperature?date=2026-11-11&shift=afternoon'},'https://example.test','missing:fridge:2026-11-11:afternoon')
     expect(body.content).toContain('ยังไม่ได้ลงข้อมูล')

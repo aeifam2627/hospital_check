@@ -57,6 +57,19 @@ Cron เดิมเรียก `enqueue_due_notification_summaries` ซึ่�
 
 เริ่มแจ้งเฉพาะกำหนดเวลาที่มาถึงหลังรัน migration ไม่ส่งเตือนย้อนหลังตั้งแต่วันแรกที่เปิดแบบตรวจ หาก scheduler หยุดชั่วคราว จะตรวจเก็บตกกำหนดเวลาล่าสุดภายใน 24 ชั่วโมง และยังป้องกันข้อความซ้ำด้วย unique dedupe key
 
+## แสดงค่าที่ตรวจได้ในข้อความ Discord
+
+Migration เพิ่มเติม: `supabase/migrations/202611110003_discord_environment_readings.sql` ต่อจากสองไฟล์ก่อนหน้า
+
+คงการแจ้งเตือน 2 ห้องตามเดิม:
+
+- ห้องตู้เย็น: แสดงอุณหภูมิตู้เย็น เช่น `อุณหภูมิตู้เย็น: 5.25 °C · เกณฑ์ 2–8 °C · อยู่ในเกณฑ์`
+- ห้องอุณหภูมิห้องและความชื้น: แสดง `อุณหภูมิห้อง: 23.5 °C` และ `ความชื้นห้อง: 55.5 %` แยกบรรทัดในข้อความเดียว พร้อมเกณฑ์และสถานะของแต่ละค่า
+
+แสดงค่าทุกรายการทั้งที่อยู่ในเกณฑ์และนอกเกณฑ์ ในข้อความบันทึกใหม่ การแก้ไข และสรุปตามเวลาที่เปิดไว้ โดยอ่านจาก snapshot ของผลตรวจ ไม่แสดงรายการผิดเกณฑ์ซ้ำสองบรรทัด และเก็บค่า `0` แยกจากช่องที่ไม่ได้กรอก
+
+เปิดใช้งานโดยรัน migration ไฟล์ `202611110003` ใน SQL Editor แล้วรัน `npx supabase functions deploy send-discord` อีกครั้ง ไม่ต้องสร้างห้องใหม่หรือแก้ Channel ID, Environment Variables, Cron หรือ Webhook การเปลี่ยนนี้ใช้กับข้อความที่สร้างใหม่หลัง migration และไม่แก้ไขข้อความที่ส่งไปแล้ว
+
 ## ทดสอบ
 
 `npm run test`, `npm run build`, `npm run test:e2e`, `npm run test:runtime`, `npm run lint`
@@ -64,3 +77,5 @@ Cron เดิมเรียก `enqueue_due_notification_summaries` ซึ่�
 ทดสอบฐานข้อมูลจริงแบบแยกด้วย PostgreSQL: สร้างฐานข้อมูลชั่วคราวและ roles `anon`, `authenticated`, `service_role` จากนั้นรัน migrations schema, reporting, legacy-import, seed และ migration สิ่งแวดล้อม ตามด้วย `tests/integration/environment-inspections.sql` (ไม่ต้องรัน migration cron ที่ต้องใช้ Supabase Vault) ชุดทดสอบ rollback ข้อมูลทั้งหมด และไม่ควรรันบน production
 
 เมื่อเพิ่ม migration รอบขาดแล้ว ให้รัน `tests/integration/missing-environment-rounds.sql` เพื่อตรวจ cutoff เวลาไทย การเปลี่ยนวันที่ตอนเที่ยงคืน การไม่แจ้งซ้ำ การข้ามรอบที่กรอกครบ การเริ่มแจ้งหลังเปิดใช้ และการข้ามห้องที่ยังไม่ตั้งค่า
+
+หลัง migration `202611110003` รัน `tests/integration/discord-environment-readings.sql` เพื่อตรวจว่าค่าปกติและผิดเกณฑ์อยู่ใน payload ทั้งการบันทึกและสรุป และยังส่งตู้เย็นไปห้องหนึ่ง ส่วนอุณหภูมิห้อง/ความชื้นรวมอีกห้องหนึ่ง
